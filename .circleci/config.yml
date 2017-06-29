@@ -2,9 +2,9 @@ version: 2
 
 jobs:
   build:
+    working_directory: /tmp/drafter
     docker:
       - image: circleci/ruby:2.4.1
-    working_directory: /tmp/drafter
 
     steps:
       - checkout
@@ -33,3 +33,27 @@ jobs:
 
       - store_artifacts:
           path: artifacts
+
+  release:
+    working_directory: /tmp/drafter
+    docker:
+      - image: circleci/ruby:2.4.1
+
+    branches:
+      only:
+        - /v.*/
+
+    steps:
+      - checkout
+      - run: git submodule update --init --recursive
+      - run: ./tools/release.sh
+
+workflows:
+  version: 2
+
+  drafter:
+    jobs:
+      - test
+      - release:
+          requires:
+            - test
