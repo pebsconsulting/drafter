@@ -11,6 +11,7 @@
 
 #include "ElementFwd.h"
 #include "ElementIfc.h"
+#include "dsd/ElementData.h"
 
 #include <iostream>
 #include <memory>
@@ -19,6 +20,8 @@
 
 namespace refract
 {
+    template <typename T, typename = std::enable_if<std::is_base_of<IElement, T>::value> >
+    constexpr bool is_primitive = dsd::is_primitive<typename T::ValueType>;
 
     struct IVisitor {
         virtual void operator()(const NullElement& e) = 0;

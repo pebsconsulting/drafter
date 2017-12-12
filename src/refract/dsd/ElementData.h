@@ -40,33 +40,45 @@ namespace refract
 
         template <>
         struct data_of<bool> {
-            using type = dsd::Boolean;
+            using type = Boolean;
         };
 
         template <>
         struct data_of<std::nullptr_t> {
-            using type = dsd::Null;
+            using type = Null;
         };
 
         template <>
         struct data_of<double> {
-            using type = dsd::Number;
+            using type = Number;
         };
 
         template <>
         struct data_of<int> {
-            using type = dsd::Number;
+            using type = Number;
         };
 
         template <>
         struct data_of<std::string> {
-            using type = dsd::String;
+            using type = String;
         };
 
         template <size_t N>
         struct data_of<char[N]> {
-            using type = dsd::String;
+            using type = String;
         };
+
+        template <typename>
+        constexpr bool is_primitive = false;
+
+        template <>
+        constexpr bool is_primitive<Boolean> = true;
+
+        template <>
+        constexpr bool is_primitive<Number> = true;
+
+        template <>
+        constexpr bool is_primitive<String> = true;
     }
 }
 
