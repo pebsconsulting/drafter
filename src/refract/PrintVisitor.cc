@@ -6,18 +6,61 @@
 //  Copyright (c) 2015 Apiary Inc. All rights reserved.
 //
 
-#include <cassert>
-#include <iostream>
-#include "VisitorUtils.h"
-
 #include "PrintVisitor.h"
+
+#include <cassert>
+#include <fstream>
+#include <iostream>
+
 #include "Visitor.h"
+#include "VisitorUtils.h"
 
 namespace refract
 {
-    PrintVisitor::PrintVisitor() : indent(0), os(std::cerr), ommitSourceMap(false)
+
+    namespace
     {
+        std::ostream& operator<<(std::ostream& out, const dsd::String& obj)
+        {
+            out << '"';
+            out << obj.get();
+            out << '"';
+            return out;
+        }
+
+        std::ostream& operator<<(std::ostream& out, const dsd::Number& obj)
+        {
+            out << obj.get();
+            return out;
+        }
+
+        std::ostream& operator<<(std::ostream& out, const dsd::Boolean& obj)
+        {
+            out << obj.get();
+            return out;
+        }
+
+        std::ostream& operator<<(std::ostream& out, const dsd::Ref& obj)
+        {
+            out << "&[";
+            out << obj.symbol();
+            out << ']';
+            return out;
+        }
+
+        template <typename ElementT>
+        std::ostream& dumpContent(std::ostream& out, const ElementT& e)
+        {
+            if (e.empty())
+                out << "<empty>";
+            else
+                out << e.get();
+
+            return out;
+        }
     }
+
+    PrintVisitor::PrintVisitor() : indent(0), os(std::cerr), ommitSourceMap(false) {}
 
     PrintVisitor::PrintVisitor(int indent_, std::ostream& os_, bool ommitSourceMap_)
         : indent(indent_), os(os_), ommitSourceMap(ommitSourceMap_)
@@ -36,8 +79,12 @@ namespace refract
     {
         indented() << "- <meta>\n";
 
-        for (const auto& m : e.meta) {
-            PrintVisitor{ indent + 1, os, ommitSourceMap }(*m);
+        PrintVisitor renderer{ indent + 1, os, ommitSourceMap };
+        for (const auto& m : e.meta()) {
+            renderer.indented() << "- `" << m.first << "`\n";
+
+            assert(m.second);
+            renderer(*m.second);
         }
     }
 
@@ -45,13 +92,15 @@ namespace refract
     {
         indented() << "- <attr>\n";
 
-        for (const auto& a : e.attributes) {
-            if (const auto mPtr = TypeQueryVisitor::as<MemberElement>(a))
-                if (const auto strPtr = TypeQueryVisitor::as<StringElement>(mPtr->value.first))
-                    if (ommitSourceMap && (strPtr->value.compare("sourceMap") == 0))
-                        continue;
+        PrintVisitor renderer{ indent + 1, os, ommitSourceMap };
+        for (const auto& a : e.attributes()) {
+            if (a.first == "sourceMap")
+                continue;
 
-            PrintVisitor{ indent + 1, os, ommitSourceMap }(*a);
+            renderer.indented() << "- `" << a.first << "`\n";
+
+            assert(a.second);
+            renderer(*a.second);
         }
     }
 
@@ -76,53 +125,57 @@ namespace refract
     {
         indented() << "- Holder[" << e.element() << "]\n";
 
-        assert(e.value);
-        PrintVisitor{ indent + 1, os, ommitSourceMap }(*e.value);
+        assert(!e.empty());
+        assert(e.get().data());
+        PrintVisitor{ indent + 1, os, ommitSourceMap }(*e.get().data());
     }
 
     void PrintVisitor::operator()(const StringElement& e)
     {
-        const StringElement::ValueType* v = GetValue<StringElement>(e);
-
-        assert(v);
-        indented() << "- String \"" << *v << "\"\n";
+        indented() << "- String ";
+        dumpContent(os, e);
+        os << '\n';
     }
 
     void PrintVisitor::operator()(const NumberElement& e)
     {
-        const NumberElement::ValueType* v = GetValue<NumberElement>(e);
-
-        assert(v);
-        indented() << "- Number " << *v << "\n";
+        indented() << "- Number ";
+        dumpContent(os, e);
+        os << '\n';
     }
 
     void PrintVisitor::operator()(const BooleanElement& e)
     {
-        const BooleanElement::ValueType* v = GetValue<BooleanElement>(e);
-
-        assert(v);
-        indented() << "- Boolean " << *v << "\n";
+        indented() << "- Boolean ";
+        dumpContent(os, e);
+        os << '\n';
     }
 
     void PrintVisitor::operator()(const RefElement& e)
     {
-        const RefElement::ValueType* v = GetValue<RefElement>(e);
-
-        assert(v);
-        indented() << "- RefElement " << *v << "&\n";
+        indented() << "- RefElement ";
+        dumpContent(os, e);
+        os << '\n';
     }
 
     void PrintVisitor::operator()(const MemberElement& e)
     {
+        assert(!e.empty());
+        const auto& content = e.get();
+
         indented() << "- MemberElement\n";
 
-        const auto keyPtr = e.value.first;
-        assert(keyPtr);
-        PrintVisitor{ indent + 1, os, ommitSourceMap }(*keyPtr);
+        {
+            PrintVisitor renderer{ indent + 1, os, ommitSourceMap };
 
-        const auto valuePtr = e.value.second;
-        assert(valuePtr);
-        PrintVisitor{ indent + 1, os, ommitSourceMap }(*valuePtr);
+            const auto keyPtr = content.key();
+            assert(keyPtr);
+            renderer(*keyPtr);
+
+            const auto valuePtr = content.value();
+            assert(valuePtr);
+            renderer(*valuePtr);
+        }
     }
 
     void PrintVisitor::operator()(const ArrayElement& e)
@@ -134,8 +187,9 @@ namespace refract
     {
         indented() << "- EnumElement "
                    << "\n";
-        if (e.value) {
-            PrintVisitor{ indent + 1, os, ommitSourceMap }(*e.value);
+
+        if (!e.empty() && e.get().value()) {
+            PrintVisitor{ indent + 1, os, ommitSourceMap }(*e.get().value());
         }
     }
 
@@ -163,6 +217,15 @@ namespace refract
     {
         PrintVisitor ps;
         refract::Visit(ps, e);
+    }
+
+    int log_to_files(const IElement& e, const std::string& name /*= "print"*/)
+    {
+        static int i = 0;
+        std::ofstream out(std::to_string(i) + "-" + name + ".log");
+        PrintVisitor printer(0, out);
+        Visit(printer, e);
+        return i++;
     }
 
 }; // namespace refract

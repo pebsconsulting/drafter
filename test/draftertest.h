@@ -73,9 +73,7 @@ namespace draftertest
         }
 
     public:
-        ITFixtureFiles(const std::string& base) : base_(base)
-        {
-        }
+        ITFixtureFiles(const std::string& base) : base_(base) {}
 
         typedef std::unique_ptr<std::istream> input_stream_type;
 
@@ -110,12 +108,8 @@ namespace draftertest
         {
             drafter::ConversionContext context(options);
 
-            refract::IElement* parseResult = WrapRefract(blueprint, context);
-            sos::Object result = SerializeRefract(parseResult, context);
-
-            if (parseResult) {
-                delete parseResult;
-            }
+            auto parseResult = WrapRefract(blueprint, context);
+            sos::Object result = SerializeRefract(parseResult.get(), context);
 
             return result;
         }

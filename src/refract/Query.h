@@ -8,7 +8,7 @@
 #ifndef REFRACT_QUERY_H
 #define REFRACT_QUERY_H
 
-#include "ElementFwd.h"
+#include "ElementIfc.h"
 
 #include <functional>
 #include <string>
@@ -26,9 +26,7 @@ namespace refract
             const std::string name;
 
         public:
-            Element(const std::string& name) : name(name)
-            {
-            }
+            Element(const std::string& name) : name(name) {}
 
             bool operator()(const IElement& e);
         };
